@@ -14,8 +14,8 @@ import (
 
 var Routes = make(route.RouteSlice, 0, 10)
 
-func InitHttp() {
-	fasthttp.ListenAndServe(HttpAddr, handler)
+func InitHttp(addr string) {
+	fasthttp.ListenAndServe(addr, handler)
 }
 
 func AddRoute(r route.Route) {
@@ -29,6 +29,10 @@ func AddRoute(r route.Route) {
 func handler(c *fasthttp.RequestCtx) {
 	var host = string(c.Host())
 	var path = string(c.Path())
+
+	addr := c.RemoteAddr()
+	log.Println(addr.String())
+
 	var matched = false
 	var r route.Route
 	for _, v := range Routes {

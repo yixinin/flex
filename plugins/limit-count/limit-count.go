@@ -1,10 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"flex/iface"
-	"strconv"
+	"flex/memcache"
+	"fmt"
 
 	"github.com/valyala/fasthttp"
+)
+
+const (
+	KeyRemoteAddr = "remote_addr"
+	ServerAddr    = "server_addr"
 )
 
 var Name string = "limit-count"
@@ -13,27 +20,40 @@ func NewPlugin(name string) iface.Plugin {
 	return NewLimitCount(name)
 }
 
+type Config struct {
+	Key      string `json:"key"`
+	Limit    int    `json:"limit"`
+	Duration int    `json:"duration"`
+	Code     int    `json:"code"`
+}
 type LimitCount struct {
-	name string
-	m    map[string]int
+	key    string
+	cache  *memcache.Cache
+	config Config
 }
 
-func NewLimitCount(name string) iface.Plugin {
+func NewLimitCount(route string) iface.Plugin {
 	return &LimitCount{
-		name: name,
-		m:    make(map[string]int, 1024),
+		key:   route,
+		cache: memcache.NewCache(1024),
 	}
 }
 
 func (l *LimitCount) Name() string {
-	return l.name
+	return Name
 }
+
+func (l *LimitCount) SetConfig(config string) error {
+	return json.Unmarshal([]byte(config), &l.config)
+}
+
 func (l *LimitCount) Handle(c *fasthttp.RequestCtx) error {
-	var host = string(c.Host())
-	l.m[host]++
-	c.Request.Header.Set("limit-count", strconv.Itoa(l.m[host]))
-	if l.m[host] > 5 {
-		return iface.Error(305, "limit gt 5")
+	var val = string(c.Request.Header.Peek(l.config.Key))
+	var key = fmt.Sprintf("%s/%s/%s", l.key, Name, val)
+	count := l.cache.Inc(key, 1, l.config.Duration)
+	if count > l.config.Limit {
+		c.SetStatusCode(l.config.Code)
+		return iface.ErrorAbort
 	}
 	return nil
 }

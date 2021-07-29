@@ -18,6 +18,5 @@ func main() {
 	var ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 	go loadPlugins(ctx)
-	InitHttp()
-	InitTcp(TcpAddr)
+	InitHttp(HttpAddr)
 }
