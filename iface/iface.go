@@ -9,6 +9,7 @@ import (
 )
 
 type Plugin interface {
+	Name() string
 	Handle(c *fasthttp.RequestCtx) error
 }
 
