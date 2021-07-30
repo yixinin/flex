@@ -1,4 +1,4 @@
-package main
+package plugins
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-var pluginsDir string
+var LoadConfigs func(ctx context.Context, dir string)
 
-func loadPlugins(ctx context.Context) {
+func LoadPlugins(ctx context.Context, dir string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -20,12 +20,12 @@ func loadPlugins(ctx context.Context) {
 		default:
 			time.Sleep(1 * time.Second)
 		}
-		var dir = pluginsDir
 		dirs, err := os.ReadDir(dir)
 		if err != nil {
 			log.Println("read dir error", err)
 			continue
 		}
+
 		for _, file := range dirs {
 			filename := path.Join(dir, file.Name())
 			info, err := file.Info()
@@ -51,39 +51,42 @@ func loadPlugins(ctx context.Context) {
 					continue
 				}
 
-				name, ok := nameFuncSymbol.(*string)
-				if !ok {
+				name, pluginExsist := nameFuncSymbol.(*string)
+				if !pluginExsist {
 					log.Printf("%s not contains (func Name() string)\n", filename)
 					continue
 				}
 
-				if p, ok := ps[*name]; ok && p.TimeStamp >= ts {
+				pg, pluginExsist := GetPool().Get(*name)
+
+				if pluginExsist && pg.TimeStamp >= ts {
 					continue
 				}
 
-				sb, err := p.Lookup("NewPlugin")
+				np, err := p.Lookup("NewPlugin")
 				if err != nil {
 					log.Println(err)
 					continue
 				}
-				fn, ok := sb.(newPlugin)
+				fn, ok := np.(newPlugin)
 				if !ok {
 					log.Println("plugin is not NewPlugin")
 					continue
 				}
-				if _, ok := ps[*name]; !ok {
+				if !pluginExsist {
 					log.Printf("load plugin %s \n", *name)
-					ps[*name] = Plugin{
+					GetPool().Set(*name, Plugin{
 						TimeStamp: ts,
-						plugin:    fn,
-					}
+						NewPlugin: fn,
+					})
+					LoadConfigs(ctx, "./http")
 				} else {
-					delete(ps, *name)
+					GetPool().Del(*name)
 					log.Printf("reload plugin %s \n", *name)
-					ps[*name] = Plugin{
+					GetPool().Set(*name, Plugin{
 						TimeStamp: ts,
-						plugin:    fn,
-					}
+						NewPlugin: fn,
+					})
 				}
 			}
 		}

@@ -5,6 +5,7 @@ import (
 	"flex/iface"
 	"flex/memcache"
 	"fmt"
+	"log"
 
 	"github.com/valyala/fasthttp"
 )
@@ -43,17 +44,27 @@ func (l *LimitCount) Name() string {
 	return Name
 }
 
-func (l *LimitCount) SetConfig(config string) error {
-	return json.Unmarshal([]byte(config), &l.config)
+func (l *LimitCount) SetConfig(config []byte) error {
+	return json.Unmarshal(config, &l.config)
 }
 
 func (l *LimitCount) Handle(c *fasthttp.RequestCtx) error {
-	var val = string(c.Request.Header.Peek(l.config.Key))
-	var key = fmt.Sprintf("%s/%s/%s", l.key, Name, val)
+	var key string
+	switch l.config.Key {
+	case ServerAddr:
+		key = fmt.Sprintf("%s/%s/%s", l.key, Name, c.Host())
+	case KeyRemoteAddr:
+		key = fmt.Sprintf("%s/%s/%s", l.key, Name, c.RemoteAddr())
+	default:
+		var val = string(c.Request.Header.Peek(l.config.Key))
+		key = fmt.Sprintf("%s/%s/%s", l.key, Name, val)
+	}
+
 	count := l.cache.Inc(key, 1, l.config.Duration)
+	log.Println(key, count, l.config.Duration)
 	if count > l.config.Limit {
 		c.SetStatusCode(l.config.Code)
-		return iface.ErrorAbort
+		return iface.Error(l.config.Code, "request limited")
 	}
 	return nil
 }

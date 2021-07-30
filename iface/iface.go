@@ -11,7 +11,7 @@ import (
 type Plugin interface {
 	Name() string
 	Handle(c *fasthttp.RequestCtx) error
-	SetConfig(config string) error
+	SetConfig(config []byte) error
 }
 
 type PluginError struct {

@@ -3,6 +3,7 @@ package memcache
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -40,7 +41,8 @@ func (c *Cache) doTTL(ctx context.Context) {
 				c.Lock()
 				defer c.Unlock()
 				for k, v := range c.m {
-					if v.start+int64(v.ttl) >= now {
+					if v.start+int64(v.ttl) <= now {
+						log.Println("delete", k, v.start, v.ttl, now)
 						delete(c.m, k)
 					}
 				}
@@ -50,7 +52,7 @@ func (c *Cache) doTTL(ctx context.Context) {
 }
 
 type Cache struct {
-	sync.Locker
+	sync.Mutex
 	m map[string]*CahceValue
 }
 
