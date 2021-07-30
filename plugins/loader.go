@@ -14,7 +14,7 @@ var UpdatePlugins func(string)
 
 var LoadConfigs func(ctx context.Context, dir string)
 
-func LoadPlugins(ctx context.Context, dir string) {
+func LoadPlugins(ctx context.Context, dir, routesDir string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -82,7 +82,7 @@ func LoadPlugins(ctx context.Context, dir string) {
 						TimeStamp: ts,
 						NewPlugin: fn,
 					})
-					LoadConfigs(ctx, "./http")
+					LoadConfigs(ctx, routesDir)
 				} else {
 					log.Printf("reload plugin %s \n", *name)
 					GetPool().Set(*name, Plugin{
