@@ -3,7 +3,9 @@ package http
 import (
 	"flex/iface"
 	"math/rand"
+	"sort"
 	"strings"
+	"sync"
 )
 
 type Server struct {
@@ -39,9 +41,15 @@ func (r *Route) Match(host, path string) bool {
 		}
 	}
 	for _, v := range r.Paths {
-		if path == v {
+		if v == path {
 			pathMatched = true
 			break
+		}
+		if strings.HasSuffix(v, "*") {
+			if strings.HasPrefix(path, v[:len(v)-1]) {
+				pathMatched = true
+				break
+			}
 		}
 	}
 	return hostMatched && pathMatched
@@ -92,3 +100,40 @@ type RouteSlice []Route
 func (a RouteSlice) Len() int           { return len(a) }
 func (a RouteSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a RouteSlice) Less(i, j int) bool { return a[i].Priority < a[j].Priority }
+
+type RouteTable struct {
+	sync.RWMutex
+	routes  RouteSlice
+	indexes map[string]int
+}
+
+func NewRouteTable() *RouteTable {
+	return &RouteTable{
+		routes: make(RouteSlice, 0),
+	}
+}
+
+func (rs *RouteTable) Foreach(f func(Route) bool) {
+	rs.RLock()
+	defer rs.RUnlock()
+	for _, v := range rs.routes {
+		if f(v) {
+			return
+		}
+	}
+}
+
+func (rs *RouteTable) Add(r Route) bool {
+	rs.Lock()
+	defer rs.Unlock()
+	if _, ok := rs.indexes[r.Name]; ok {
+		return false
+	}
+	rs.routes = append(rs.routes, r)
+	sort.Sort(rs.routes)
+	rs.indexes = make(map[string]int, len(rs.routes))
+	for i, v := range rs.routes {
+		rs.indexes[v.Name] = i
+	}
+	return true
+}

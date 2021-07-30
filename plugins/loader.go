@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var UpdatePlugins func(string)
+
 var LoadConfigs func(ctx context.Context, dir string)
 
 func LoadPlugins(ctx context.Context, dir string) {
@@ -62,6 +64,7 @@ func LoadPlugins(ctx context.Context, dir string) {
 				if pluginExsist && pg.TimeStamp >= ts {
 					continue
 				}
+				time.Sleep(1 * time.Second)
 
 				np, err := p.Lookup("NewPlugin")
 				if err != nil {
@@ -81,12 +84,12 @@ func LoadPlugins(ctx context.Context, dir string) {
 					})
 					LoadConfigs(ctx, "./http")
 				} else {
-					GetPool().Del(*name)
 					log.Printf("reload plugin %s \n", *name)
 					GetPool().Set(*name, Plugin{
 						TimeStamp: ts,
 						NewPlugin: fn,
 					})
+					UpdatePlugins(*name)
 				}
 			}
 		}

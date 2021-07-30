@@ -31,6 +31,7 @@ func (pool *PluginPool) Set(name string, p Plugin) bool {
 	pool.Lock()
 	defer pool.Unlock()
 	_, ok := pool.ps[name]
+	delete(pool.ps, name)
 	pool.ps[name] = p
 	return ok
 }

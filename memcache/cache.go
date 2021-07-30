@@ -41,6 +41,9 @@ func (c *Cache) doTTL(ctx context.Context) {
 				c.Lock()
 				defer c.Unlock()
 				for k, v := range c.m {
+					if v.ttl <= 0 {
+						continue
+					}
 					if v.start+int64(v.ttl) <= now {
 						log.Println("delete", k, v.start, v.ttl, now)
 						delete(c.m, k)

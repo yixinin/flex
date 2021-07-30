@@ -5,7 +5,6 @@ import (
 	"flex/iface"
 	"flex/memcache"
 	"fmt"
-	"log"
 
 	"github.com/valyala/fasthttp"
 )
@@ -61,7 +60,6 @@ func (l *LimitCount) Handle(c *fasthttp.RequestCtx) error {
 	}
 
 	count := l.cache.Inc(key, 1, l.config.Duration)
-	log.Println(key, count, l.config.Duration)
 	if count > l.config.Limit {
 		c.SetStatusCode(l.config.Code)
 		return iface.Error(l.config.Code, "request limited")

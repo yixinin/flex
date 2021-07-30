@@ -5,13 +5,69 @@ import (
 	"flex/iface"
 	"flex/plugins"
 	"log"
-	"sort"
+	"sync"
 	"time"
 
 	"github.com/valyala/fasthttp"
 )
 
-var Routes = make(RouteSlice, 0, 10)
+var clientPool = sync.Pool{
+	New: func() interface{} {
+		return &fasthttp.Client{}
+	},
+}
+
+func init() {
+	plugins.UpdatePlugins = UpdatePlugins
+}
+
+var routes *RouteTable
+var once sync.Once
+
+func GetRoutes() *RouteTable {
+	if routes == nil {
+		once.Do(func() {
+			routes = NewRouteTable()
+		})
+		return routes
+	}
+
+	return routes
+}
+
+func UpdatePlugins(name string) {
+	GetRoutes().Foreach(func(r Route) bool {
+		_, ok := r.Plugins[name]
+		if !ok {
+			return false
+		}
+		delete(r.Plugins, name)
+		pg, ok := plugins.GetPool().Get(name)
+		if !ok {
+			log.Println("plugin pool", name, "not exsist")
+			return false
+		}
+
+		p := pg.NewPlugin(r.Name)
+		c, ok := r.Configs[name]
+		if !ok {
+			log.Println("config", name, "not exsist")
+			return false
+		}
+		buf, err := json.Marshal(c)
+		if err != nil {
+			log.Println(err)
+			return false
+		}
+		err = p.SetConfig(buf)
+		if err != nil {
+			log.Println(err)
+			return false
+		}
+		r.Plugins[name] = p
+		return false
+	})
+}
 
 func InitHttp(addr string) {
 	fasthttp.ListenAndServe(addr, handler)
@@ -37,28 +93,29 @@ func AddRoute(r Route) {
 		}
 		r.Plugins[k] = p
 	}
-	Routes = append(Routes, r)
-	sort.Sort(Routes)
+	if !GetRoutes().Add(r) {
+		log.Println("route add fail, duplicate route name")
+	}
 }
 
 func handler(c *fasthttp.RequestCtx) {
 	var host = string(c.Host())
 	var path = string(c.Path())
 
-	addr := c.RemoteAddr()
-	log.Println(addr.String(), host, path)
-
 	var matched = false
 	var r Route
-	for _, v := range Routes {
-		if v.Match(host, path) {
-			r = v
+
+	GetRoutes().Foreach(func(route Route) bool {
+		if route.Match(host, path) {
+			r = route
 			matched = true
-			break
+			return true
 		}
-	}
+		return false
+	})
+
 	if !matched {
-		log.Println("not matched")
+		log.Println(host, path, "not matched")
 		c.SetStatusCode(500)
 		c.WriteString("server not reachable")
 		return
@@ -95,8 +152,10 @@ func handler(c *fasthttp.RequestCtx) {
 	newPath := r.Rewrite(path)
 	c.URI().SetPath(newPath)
 
-	err := fasthttp.DoTimeout(&c.Request, &c.Response, time.Second*time.Duration(r.Timeout))
+	client := clientPool.Get().(*fasthttp.Client)
+	err := client.DoTimeout(&c.Request, &c.Response, time.Second*time.Duration(r.Timeout))
 	if err != nil {
 		log.Println(err)
 	}
+	clientPool.Put(client)
 }
